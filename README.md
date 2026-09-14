@@ -12,11 +12,11 @@ CloudVault is a secure, scalable, and cost-conscious document platform. I am usi
 
 **Phase 0 — IAM & account foundations**
 
-- [ ] Create the GitHub repository
-- [ ] Configure a $10/month AWS Budget
-- [ ] Secure the AWS root user and everyday access
-- [ ] Configure AWS CLI with temporary credentials
-- [ ] Verify identity with `aws sts get-caller-identity`
+- [x] Create the GitHub repository
+- [x] Configure a $10/month AWS Budget
+- [x] Secure the AWS root user and everyday access
+- [x] Configure AWS CLI with temporary credentials
+- [x] Verify identity with `aws sts get-caller-identity`
 - [ ] Create the first CloudVault IAM policy and role
 - [ ] Document Phase 0 lessons
 - [ ] Move to the next SAA section
