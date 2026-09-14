@@ -1,0 +1,17 @@
+flowchart TD
+    U[User] --> CF[CloudFront]
+    CF --> FE[Static Web Frontend]
+    FE --> C[Cognito]
+    FE --> APIGW[API Gateway]
+    APIGW --> L1[API Lambda]
+
+    L1 --> DDB[(DynamoDB)]
+    L1 --> S3[(S3 Documents)]
+
+    S3 --> SQS[SQS Queue]
+    SQS --> L2[Processing Lambda]
+    L2 --> S3
+    L2 --> DDB
+
+    L1 --> CW[CloudWatch]
+    L2 --> CW
