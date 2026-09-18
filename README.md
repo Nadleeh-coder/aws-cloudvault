@@ -10,16 +10,45 @@ CloudVault is a secure, scalable, and cost-conscious document platform. I am usi
 
 ## Current status
 
-**Phase 0 — IAM & account foundations**
+### Phase 0 — IAM & Account Foundations
+
+**Status: ✅ Complete**
 
 - [x] Create the GitHub repository
 - [x] Configure a $10/month AWS Budget
 - [x] Secure the AWS root user and everyday access
 - [x] Configure AWS CLI with temporary credentials
 - [x] Verify identity with `aws sts get-caller-identity`
-- [ ] Create the first CloudVault IAM policy and role
-- [ ] Document Phase 0 lessons
-- [ ] Move to the next SAA section
+- [x] Create `CloudVaultEC2Role`
+- [x] Validate its EC2 trust relationship
+- [x] Document Phase 0 lessons
+
+### Phase 1 — Amazon S3 / Object Storage
+
+**Status: 🟡 In Progress**
+
+Completed so far:
+
+- [x] Create the CloudVault document bucket
+- [x] Use `ap-southeast-1`
+- [x] Configure `BucketOwnerEnforced`
+- [x] Enable all S3 Block Public Access controls
+- [x] Enable bucket versioning
+- [x] Configure SSE-S3 (`AES256`)
+- [x] Add CloudVault resource tags
+- [x] Upload and download objects through the AWS CLI
+- [x] Test object versioning
+- [x] Test delete markers and recovery
+- [x] Test restoring an older object version
+- [x] Finalize the least-privilege S3 IAM policy
+- [x] Validate the policy with IAM Access Analyzer
+- [x] Create `CloudVaultS3DocumentAccess`
+- [x] Attach the policy to `CloudVaultEC2Role`
+- [x] Validate allowed and denied actions with the IAM policy simulator
+- [ ] Configure S3 lifecycle management
+- [ ] Review S3 storage classes
+- [ ] Test presigned URLs
+- [ ] Complete Phase 1 validation and documentation
 
 ## Budget guardrail
 
@@ -49,7 +78,7 @@ flowchart TD
     L2 --> CW
 ```
 
-The architecture will evolve as each AWS service is covered in the course.
+The target architecture will evolve as each AWS service is covered in the course. A separate current-state diagram records only what has actually been implemented so far.
 
 ## Roadmap
 
@@ -70,18 +99,27 @@ The architecture will evolve as each AWS service is covered in the course.
 ```text
 aws-cloudvault/
 ├── README.md
+├── PHASE-0-SETUP.md
 ├── budget/
 │   ├── budget.json
 │   └── notifications.json
 ├── docs/
 │   ├── architecture/
-│   │   └── cloudvault-architecture.mmd
-│   └── learning-log/
-│       └── phase-0-iam.md
+│   │   ├── cloudvault-architecture.mmd
+│   │   └── cloudvault-current-state.mmd
+│   ├── learning-log/
+│   │   ├── phase-0-iam.md
+│   │   └── phase-1-s3.md
+│   └── reference/
+│       └── CloudVault_Command_Notes.xlsx
 ├── iam/
 │   ├── assume-role-policy-ec2.json
 │   └── policies/
 │       └── cloudvault-s3-document-access.json
+├── s3/
+│   └── config/
+│       ├── bucket_encryption.json
+│       └── bucket-tags.json
 ├── backend/
 ├── frontend/
 └── infrastructure/
@@ -93,7 +131,9 @@ aws-cloudvault/
 - Protect root and other privileged access with MFA.
 - Prefer temporary credentials over long-lived access keys.
 - Grant least privilege and scope resource access wherever possible.
+- Keep S3 document storage private by default.
 - Never commit secrets, access keys, tokens, `.env` files, or AWS credential files.
+- Avoid publishing unnecessary account IDs, account-specific ARNs, role IDs, canonical owner IDs, and object version IDs.
 
 ## Cost principles
 
@@ -102,10 +142,11 @@ aws-cloudvault/
 - Shut down or delete lab resources after use.
 - Review Billing/Cost Explorer regularly.
 - Keep CloudWatch log retention deliberate rather than unlimited by default.
+- Use lifecycle management where it improves long-term storage hygiene without adding unnecessary complexity.
 
-## Phase 0 verification
+## Identity verification
 
-After configuring the AWS CLI, verify the active identity:
+Before performing project operations, verify the active AWS identity:
 
 ```powershell
 aws sts get-caller-identity --profile cloudvault

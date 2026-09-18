@@ -18,19 +18,39 @@ If GitHub CLI is installed and authenticated:
 gh repo create aws-cloudvault --public --source=. --remote=origin --push
 ```
 
-Otherwise, create an empty public repository named `aws-cloudvault` on GitHub, then:
+Otherwise, create an empty repository named `aws-cloudvault` on GitHub, then:
 
 ```powershell
 git remote add origin https://github.com/YOUR_GITHUB_USERNAME/aws-cloudvault.git
 git push -u origin main
 ```
 
-## 2. Configure AWS CLI using IAM Identity Center
+## 2. Configure AWS CLI project access
+
+CloudVault uses a dedicated AWS CLI profile and temporary login-based credentials rather than long-lived access keys.
+
+Start or refresh the CloudVault CLI session:
 
 ```powershell
-aws configure sso --profile cloudvault
-aws sso login --profile cloudvault
+aws login --profile cloudvault
+```
+
+Inspect the effective profile configuration:
+
+```powershell
+aws configure list --profile cloudvault
+```
+
+Verify the active identity before performing project operations:
+
+```powershell
 aws sts get-caller-identity --profile cloudvault
+```
+
+When the authenticated session is no longer needed:
+
+```powershell
+aws logout --profile cloudvault
 ```
 
 ## 3. Create a $10 monthly budget from the CLI
@@ -59,23 +79,34 @@ You can also create it in the Billing console if your current permission set doe
 aws iam create-role `
   --role-name CloudVaultEC2Role `
   --assume-role-policy-document file://iam/assume-role-policy-ec2.json `
+  --tags Key=Project,Value=CloudVault `
   --profile cloudvault
 ```
 
-The S3 policy contains a bucket placeholder. Do not create/attach it until you choose your S3 bucket name in the S3 phase.
-
-Later, after replacing `REPLACE_WITH_CLOUDVAULT_BUCKET`, create the managed policy:
+Verify the role and its EC2 trust relationship:
 
 ```powershell
-$AccountId = aws sts get-caller-identity --profile cloudvault --query Account --output text
-
-aws iam create-policy `
-  --policy-name CloudVaultS3DocumentAccess `
-  --policy-document file://iam/policies/cloudvault-s3-document-access.json `
-  --profile cloudvault
-
-aws iam attach-role-policy `
+aws iam get-role `
   --role-name CloudVaultEC2Role `
-  --policy-arn "arn:aws:iam::$AccountId:policy/CloudVaultS3DocumentAccess" `
   --profile cloudvault
 ```
+
+## 5. S3 permissions — intentionally deferred
+
+At the end of Phase 0, `CloudVaultEC2Role` intentionally had no workload permissions.
+
+The S3 permissions policy was kept as a draft until the real CloudVault S3 bucket existed. This avoided using an unnecessarily broad resource such as:
+
+```json
+"Resource": "*"
+```
+
+The policy was finalized, validated, created, and attached during Phase 1 after the real bucket existed.
+
+See:
+
+```text
+docs/learning-log/phase-1-s3.md
+```
+
+for the S3 and least-privilege implementation.

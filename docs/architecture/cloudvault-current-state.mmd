@@ -1,0 +1,12 @@
+flowchart TD
+    DEV[Developer] --> CLI[AWS CLI<br/>cloudvault profile]
+    CLI --> S3[(S3<br/>cloudvault-documents-dev01)]
+
+    EC2[EC2 Service<br/>Future Workload] -. sts:AssumeRole .-> ROLE[CloudVaultEC2Role]
+    ROLE --> POLICY[CloudVaultS3DocumentAccess]
+    POLICY --> PREFIX[S3 documents/*]
+    PREFIX --> S3
+
+    S3 --> VER[Versioning Enabled]
+    S3 --> ENC[SSE-S3 / AES256]
+    S3 --> BPA[Block Public Access]

@@ -454,3 +454,48 @@ Planned topics include:
 The goal remains:
 
 > **Learn → Build → Break → Troubleshoot → Document → Improve**
+
+---
+
+# Phase 1 Follow-up
+
+The Phase 0 state documented above is intentionally preserved as a historical snapshot.
+
+At the end of Phase 0:
+
+```text
+CloudVaultEC2Role
+├── trusted EC2
+└── had no workload permissions
+```
+
+During Phase 1, the CloudVault S3 document bucket was created and the previously drafted S3 policy was finalized using the real bucket ARN.
+
+The resulting customer-managed policy:
+
+```text
+CloudVaultS3DocumentAccess
+```
+
+was validated with IAM Access Analyzer and attached to:
+
+```text
+CloudVaultEC2Role
+```
+
+The role now has least-privilege access to CloudVault objects under:
+
+```text
+documents/*
+```
+
+while unrelated prefixes, unrelated buckets, bucket deletion, and permanent deletion of historical object versions remain denied by the current identity policy.
+
+The role's EC2 trust relationship did not change. The EC2 instance profile remains intentionally deferred until the compute phase, when the role can be tested from a real workload.
+
+Full implementation details are documented in:
+
+```text
+docs/learning-log/phase-1-s3.md
+```
+
