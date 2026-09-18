@@ -2,12 +2,20 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ListCloudVaultBucket",
+      "Sid": "ListCloudVaultDocuments",
       "Effect": "Allow",
       "Action": [
         "s3:ListBucket"
       ],
-      "Resource": "arn:aws:s3:::REPLACE_WITH_CLOUDVAULT_BUCKET"
+      "Resource": "arn:aws:s3:::cloudvault-documents-dev01",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "documents",
+            "documents/*"
+          ]
+        }
+      }
     },
     {
       "Sid": "AccessCloudVaultDocumentObjects",
@@ -17,7 +25,7 @@
         "s3:PutObject",
         "s3:DeleteObject"
       ],
-      "Resource": "arn:aws:s3:::REPLACE_WITH_CLOUDVAULT_BUCKET/documents/*"
+      "Resource": "arn:aws:s3:::cloudvault-documents-dev01/documents/*"
     }
   ]
 }
