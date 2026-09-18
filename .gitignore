@@ -32,3 +32,6 @@ Thumbs.db
 .terraform/
 *.tfstate
 *.tfstate.*
+
+# Local CloudVault lab/test artifacts
+/test-data/
