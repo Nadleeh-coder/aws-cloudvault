@@ -1,8 +1,9 @@
 # Phase 1 — Amazon S3 / Object Storage
 
 **Project:** CloudVault  
-**Status:** 🟡 In Progress  
-**Started:** 2026-09-16
+**Status:** 🟢 Complete  
+**Started:** 2026-09-16  
+**Completed:** 2026-09-25
 
 ## Objective
 
@@ -40,7 +41,13 @@ This phase focuses on:
 - [x] Configure S3 lifecycle management
 - [x] Review S3 storage classes
 - [x] Test presigned URLs
-- [ ] Complete final Phase 1 validation
+- [x] Test user-defined S3 object metadata
+- [x] Test metadata replacement with object versioning
+- [x] Review CloudWatch S3 storage metrics
+- [x] Review CloudTrail S3 management-event visibility
+- [x] Review S3 monitoring options and cost trade-offs
+- [x] Complete Phase 1 cost and security validation
+- [x] Complete final Phase 1 validation
 
 ---
 
@@ -423,6 +430,134 @@ In the future application architecture, authentication and authorization can occ
 
 ---
 
+## S3 Object Metadata Lab
+
+A metadata exercise was performed with:
+
+```text
+documents/metadata-test.txt
+```
+
+The object was initially uploaded with user-defined metadata:
+
+```text
+document-type = learning-note
+uploaded-by   = cloudvault-cli
+project       = cloudvault
+```
+
+The object was then copied onto the same key using `copy-object` with `MetadataDirective=REPLACE`. The `document-type` value was changed from `learning-note` to `project-note` while the object content remained unchanged.
+
+Because bucket versioning is enabled, replacing the metadata created a new object version. Inspecting the previous version confirmed that it retained the original metadata.
+
+This demonstrated an important S3 behavior:
+
+> User-defined metadata belongs to an individual object version. Replacing metadata on an existing key in a versioned bucket creates a new version rather than mutating the historical version.
+
+Actual object version IDs are intentionally omitted from project documentation.
+
+---
+
+## S3 Monitoring and Observability
+
+CloudVault's baseline S3 observability was reviewed without enabling additional paid monitoring features.
+
+CloudWatch exposed the automatic daily S3 storage metrics:
+
+```text
+BucketSizeBytes
+NumberOfObjects
+```
+
+The observed daily snapshot reported a very small learning workload, consistent with the test objects stored in the bucket. These storage metrics are daily measurements and should not be interpreted as real-time object inventory.
+
+No S3 request-metrics configuration was enabled.
+
+CloudTrail Event History was also reviewed. S3 management events were visible, including operations related to bucket metrics configuration, public-access settings, encryption, and logging.
+
+No customer-created CloudTrail trail exists for CloudVault, and S3 object-level data events are not enabled. Therefore, object operations such as individual `GetObject` and `PutObject` calls should not be expected in the current CloudTrail Event History configuration.
+
+The distinction is:
+
+```text
+CloudWatch → operational metrics and measurements
+CloudTrail → AWS API activity and audit history
+```
+
+At the current learning-project scale, S3 request metrics and CloudTrail S3 data events were intentionally not enabled. They can be introduced later when CloudVault has a workload or audit requirement that justifies the additional configuration and cost.
+
+---
+
+## Final Storage and Lifecycle Validation
+
+A privacy-safe final inventory confirmed:
+
+```text
+Current objects:              3
+Total object versions:        7
+Noncurrent versions:          4
+Delete markers:               0
+Incomplete multipart uploads: 0
+Storage class:                S3 Standard
+```
+
+The total stored learning data remained only a few hundred bytes across current and historical versions.
+
+The lifecycle configuration was retrieved again and remained enabled for `documents/`, with noncurrent versions eligible for expiration after 30 days. No storage-class transition is configured.
+
+This validation reinforced why lifecycle management matters in a versioned bucket: overwrites and metadata replacements can create historical versions even when only a few logical object keys are visible.
+
+---
+
+## Final Security Validation
+
+The bucket's final security state was revalidated:
+
+```text
+BlockPublicAcls        = true
+IgnorePublicAcls       = true
+BlockPublicPolicy      = true
+RestrictPublicBuckets = true
+
+ObjectOwnership = BucketOwnerEnforced
+Encryption      = SSE-S3 / AES256
+Versioning      = Enabled
+Bucket policy   = None
+```
+
+The absence of a bucket policy is intentional for the current design. CloudVault access is controlled through IAM identity permissions, while S3 Block Public Access remains fully enabled.
+
+---
+
+## Final IAM Validation
+
+The Phase 1 IAM configuration was revalidated without recording account-specific identifiers:
+
+```text
+CloudVaultEC2Role
+├── Trust principal: ec2.amazonaws.com
+├── Action: sts:AssumeRole
+├── Attached policy: CloudVaultS3DocumentAccess
+├── Inline policies: none
+└── Project tag: CloudVault
+```
+
+The trust relationship remains scoped to EC2, while the attached customer-managed policy provides the limited S3 permissions required for `documents/*`.
+
+An EC2 instance profile has not yet been created. Runtime validation of the role remains intentionally deferred until the compute phase.
+
+---
+
+## Phase 1 Cost Review
+
+AWS Cost Explorer was reviewed for the September 2026 month-to-date period. At the current lab scale, both the Amazon S3 cost and the overall AWS cost were effectively zero. The current-period Cost Explorer values were marked as estimated.
+
+This keeps Phase 1 comfortably within CloudVault's learning-project budget ceiling of USD 10 per month.
+
+The cost review also supports the current architectural decisions: retain S3 Standard for active test documents, expire noncurrent versions after 30 days, and avoid additional monitoring features until there is a workload or audit requirement for them.
+
+---
+
 ## IAM Policy
 
 The Phase 0 draft policy:
@@ -693,6 +828,41 @@ allowed Boto3 to use the existing login-based AWS profile successfully.
 
 No static access keys were required.
 
+### JMESPath equality comparison
+
+JMESPath filter equality uses:
+
+```text
+==
+```
+
+rather than a single `=`.
+
+### AWS CLI option spelling
+
+AWS CLI long options require the complete double-hyphen option name. Examples used during monitoring validation include:
+
+```text
+--dimensions
+--namespace
+```
+
+Misspelled options such as `--dimensiosn` or a single-hyphen `-namespace` are not valid.
+
+### Cost Explorer time period in PowerShell
+
+Passing the Cost Explorer shorthand expression directly caused a date-validation error in PowerShell. Constructing the value as a single string produced the intended AWS CLI argument:
+
+```powershell
+$TimePeriod = "Start=$StartDate,End=$EndDate"
+
+aws ce get-cost-and-usage `
+  --time-period $TimePeriod `
+  --granularity MONTHLY `
+  --metrics UnblendedCost `
+  --profile cloudvault
+```
+
 ---
 
 ## Security / Privacy Notes
@@ -716,7 +886,7 @@ Where examples are required, generic placeholders should be used.
 
 ## Current Result
 
-CloudVault now has a private, versioned S3 document layer with:
+CloudVault now has a validated private S3 document-storage layer:
 
 ```text
 CloudVaultEC2Role
@@ -729,29 +899,25 @@ cloudvault-documents-dev01
               │
               ├── SSE-S3 encryption
               ├── object versioning
+              ├── user-defined metadata
               ├── 30-day noncurrent-version lifecycle expiration
-              └── temporary access through presigned URLs
+              ├── temporary access through presigned URLs
+              └── baseline CloudWatch / CloudTrail observability
 ```
 
-The S3 bucket remains private with all Block Public Access controls enabled.
+The bucket remains private with all S3 Block Public Access controls enabled. Presigned GET and PUT workflows demonstrated temporary document access without making the bucket public. Metadata testing demonstrated version-aware metadata behavior, and the final IAM, storage, lifecycle, security, monitoring, and cost reviews confirmed the intended Phase 1 design.
 
-Presigned GET and PUT workflows demonstrated that temporary document access can be provided without exposing the bucket publicly.
+The EC2 instance profile and real workload role-assumption test remain intentionally deferred until the compute phase.
 
-The EC2 instance profile remains intentionally deferred until the compute phase.
+**Phase 1 — Amazon S3 / Object Storage is complete.**
 
 ---
 
 ## Next
 
-The remaining Phase 1 work is:
+Phase 1 is complete.
 
-```text
-Final S3 validation
-→ documentation review
-→ Phase 1 completion
-```
-
-After Phase 1 is complete, CloudVault will proceed to the next planned AWS infrastructure phase.
+Before beginning the next CloudVault infrastructure phase, the next project phase will be aligned with the current AWS Solutions Architect Associate course progress.
 
 The goal remains:
 

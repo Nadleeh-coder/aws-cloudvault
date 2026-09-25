@@ -25,9 +25,7 @@ CloudVault is a secure, scalable, and cost-conscious document platform. I am usi
 
 ### Phase 1 — Amazon S3 / Object Storage
 
-**Status: 🟡 In Progress**
-
-Completed so far:
+**Status: ✅ Complete**
 
 - [x] Create the CloudVault document bucket
 - [x] Use `ap-southeast-1`
@@ -50,13 +48,37 @@ Completed so far:
 - [x] Review S3 storage classes
 - [x] Test presigned URLs for temporary private access
 - [x] Test direct upload with a presigned PUT URL
-- [ ] Complete Phase 1 validation and documentation
+- [x] Test S3 user-defined object metadata
+- [x] Validate metadata behavior with object versioning
+- [x] Review CloudWatch S3 storage metrics
+- [x] Review CloudTrail management-event visibility
+- [x] Validate final bucket security configuration
+- [x] Validate final IAM role and policy configuration
+- [x] Review Phase 1 storage usage and AWS cost
+- [x] Complete Phase 1 validation and documentation
+
+## Current implementation
+
+CloudVault currently has a private S3 document-storage foundation with:
+
+- S3 Block Public Access fully enabled
+- `BucketOwnerEnforced` object ownership
+- SSE-S3 encryption
+- object versioning and recovery
+- 30-day expiration of noncurrent versions
+- least-privilege IAM access through `CloudVaultEC2Role`
+- presigned GET and PUT workflows
+- baseline CloudWatch and CloudTrail observability
+
+The EC2 runtime integration is intentionally deferred until the compute phase.
 
 ## Budget guardrail
 
 **Target steady-state cost:** less than **$10 USD/month**
 
 The project will prefer serverless and pay-per-use services for the final architecture. More expensive always-on resources such as NAT Gateways, load balancers, EC2 fleets, and RDS deployments will be treated as temporary learning labs unless they can be justified within the budget.
+
+Phase 1 cost validation confirmed that the S3 learning workload remained effectively at $0 at its current lab scale and comfortably within the project budget. Current-period Cost Explorer figures are estimates until billing data is finalized.
 
 ## Planned architecture
 
@@ -87,7 +109,7 @@ The target architecture will evolve as each AWS service is covered in the course
 | Phase | Focus | AWS concepts/services |
 |---|---|---|
 | 0 | Security foundation | IAM, MFA, roles, policies, AWS CLI, STS |
-| 1 | Object storage | S3, encryption, versioning, lifecycle, storage classes, presigned URLs |
+| 1 | Object storage | S3, encryption, versioning, metadata, lifecycle, storage classes, presigned URLs, monitoring |
 | 2 | Compute | EC2, EBS, user data, instance roles |
 | 3 | Networking & HA | VPC, subnets, routing, security groups, ELB, Auto Scaling |
 | 4 | Databases | RDS, backups, Multi-AZ concepts, DynamoDB |
@@ -136,6 +158,7 @@ aws-cloudvault/
 - Protect root and other privileged access with MFA.
 - Prefer temporary credentials over long-lived access keys.
 - Grant least privilege and scope resource access wherever possible.
+- Keep IAM trust relationships separate from workload permissions and validate both independently.
 - Keep S3 document storage private by default.
 - Use short-lived presigned URLs when temporary access to private S3 objects is required.
 - Treat active presigned URLs as sensitive and never commit them to source control.
@@ -150,6 +173,7 @@ aws-cloudvault/
 - Review Billing/Cost Explorer regularly.
 - Keep CloudWatch log retention deliberate rather than unlimited by default.
 - Use lifecycle management where it improves long-term storage hygiene without adding unnecessary complexity.
+- Enable additional monitoring or audit features when their operational or security value justifies their cost and complexity.
 
 ## Identity verification
 
