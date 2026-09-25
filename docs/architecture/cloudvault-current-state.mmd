@@ -8,5 +8,13 @@ flowchart TD
     PREFIX --> S3
 
     S3 --> VER[Versioning Enabled]
-    S3 --> ENC[SSE-S3 / AES256]
-    S3 --> BPA[Block Public Access]
+    S3 --> ENC[SSE-S3<br/>AES256]
+    S3 --> BPA[Block Public Access<br/>All Controls Enabled]
+    S3 --> LIFE[Lifecycle Rule<br/>Noncurrent Versions: 30 Days]
+
+    DEV --> SDK[Python / Boto3<br/>cloudvault profile]
+    SDK --> PRESIGN[Generate Presigned URL]
+    PRESIGN --> GET[Temporary GET Access]
+    PRESIGN --> PUT[Temporary PUT Access]
+    GET --> S3
+    PUT --> S3

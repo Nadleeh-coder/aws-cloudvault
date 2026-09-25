@@ -1,0 +1,14 @@
+{
+    "Rules": [
+        {
+            "ID": "ExpireNoncurrentCloudVaultDocuments",
+            "Status": "Enabled",
+            "Filter": {
+                "Prefix": "documents/"
+            },
+            "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 30
+            }
+        }
+    ]
+}
