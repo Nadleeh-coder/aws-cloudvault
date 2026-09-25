@@ -45,9 +45,11 @@ Completed so far:
 - [x] Create `CloudVaultS3DocumentAccess`
 - [x] Attach the policy to `CloudVaultEC2Role`
 - [x] Validate allowed and denied actions with the IAM policy simulator
-- [ ] Configure S3 lifecycle management
-- [ ] Review S3 storage classes
-- [ ] Test presigned URLs
+- [x] Configure S3 lifecycle management
+- [x] Configure 30-day expiration for noncurrent object versions
+- [x] Review S3 storage classes
+- [x] Test presigned URLs for temporary private access
+- [x] Test direct upload with a presigned PUT URL
 - [ ] Complete Phase 1 validation and documentation
 
 ## Budget guardrail
@@ -85,7 +87,7 @@ The target architecture will evolve as each AWS service is covered in the course
 | Phase | Focus | AWS concepts/services |
 |---|---|---|
 | 0 | Security foundation | IAM, MFA, roles, policies, AWS CLI, STS |
-| 1 | Object storage | S3, encryption, versioning, lifecycle |
+| 1 | Object storage | S3, encryption, versioning, lifecycle, storage classes, presigned URLs |
 | 2 | Compute | EC2, EBS, user data, instance roles |
 | 3 | Networking & HA | VPC, subnets, routing, security groups, ELB, Auto Scaling |
 | 4 | Databases | RDS, backups, Multi-AZ concepts, DynamoDB |
@@ -119,7 +121,10 @@ aws-cloudvault/
 ├── s3/
 │   └── config/
 │       ├── bucket_encryption.json
-│       └── bucket-tags.json
+│       ├── bucket-tags.json
+│       └── lifecycle.json
+├── scripts/
+│   └── presigned_put.py
 ├── backend/
 ├── frontend/
 └── infrastructure/
@@ -132,6 +137,8 @@ aws-cloudvault/
 - Prefer temporary credentials over long-lived access keys.
 - Grant least privilege and scope resource access wherever possible.
 - Keep S3 document storage private by default.
+- Use short-lived presigned URLs when temporary access to private S3 objects is required.
+- Treat active presigned URLs as sensitive and never commit them to source control.
 - Never commit secrets, access keys, tokens, `.env` files, or AWS credential files.
 - Avoid publishing unnecessary account IDs, account-specific ARNs, role IDs, canonical owner IDs, and object version IDs.
 

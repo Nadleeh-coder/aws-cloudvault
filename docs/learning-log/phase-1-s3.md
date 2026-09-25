@@ -37,9 +37,9 @@ This phase focuses on:
 - [x] Validate the policy with IAM Access Analyzer
 - [x] Create and attach `CloudVaultS3DocumentAccess`
 - [x] Validate allowed and denied actions with IAM policy simulation
-- [ ] Configure S3 lifecycle management
-- [ ] Review S3 storage classes
-- [ ] Test presigned URLs
+- [x] Configure S3 lifecycle management
+- [x] Review S3 storage classes
+- [x] Test presigned URLs
 - [ ] Complete final Phase 1 validation
 
 ---
@@ -101,6 +101,12 @@ Bucket tags are documented in:
 
 ```text
 s3/config/bucket-tags.json
+```
+
+Lifecycle management is documented in:
+
+```text
+s3/config/lifecycle.json
 ```
 
 Keeping these settings in files makes the project configuration easier to review and reproduce than relying only on console state.
@@ -186,6 +192,234 @@ This demonstrated:
 Historical versions remain immutable.
 Restoring old content creates a new version.
 ```
+
+---
+
+## S3 Lifecycle Management
+
+A lifecycle rule was configured for the application-controlled `documents/` prefix.
+
+Rule:
+
+```text
+ExpireNoncurrentCloudVaultDocuments
+```
+
+Configuration:
+
+```text
+Prefix: documents/
+Status: Enabled
+Noncurrent version expiration: 30 days
+```
+
+The rule applies specifically to noncurrent object versions. Current versions are not expired by this rule.
+
+Conceptually:
+
+```text
+Current version
+    │
+    └── remains available
+
+Noncurrent version
+    │
+    └── 30 days
+            ↓
+      eligible for lifecycle expiration
+```
+
+This provides a cost-control mechanism for a versioned bucket by preventing historical object versions from accumulating indefinitely.
+
+The lifecycle configuration is stored in:
+
+```text
+s3/config/lifecycle.json
+```
+
+The configuration was applied with `put-bucket-lifecycle-configuration` and subsequently retrieved from AWS to verify that the enabled rule matched the intended configuration.
+
+Lifecycle processing is asynchronous, so the 30-day value represents eligibility according to the lifecycle rule rather than an exact deletion time.
+
+---
+
+## S3 Storage Class Review
+
+The current CloudVault test object was inspected with `head-object`.
+
+The result showed:
+
+```text
+StorageClass = null
+```
+
+For an object using the default S3 storage class, this represents:
+
+```text
+S3 Standard
+```
+
+The same inspection confirmed:
+
+```text
+ServerSideEncryption = AES256
+```
+
+No lifecycle storage-class transition was added at this stage.
+
+This was an intentional architectural decision. CloudVault does not yet have a demonstrated access pattern that justifies moving active documents into an infrequent-access or archival storage class.
+
+The current design therefore remains:
+
+```text
+Current documents
+        ↓
+   S3 Standard
+
+Noncurrent versions
+        ↓
+      30 days
+        ↓
+Lifecycle expiration
+```
+
+Storage-class transitions can be introduced later when the workload provides a clear retention and access pattern.
+
+---
+
+## Presigned URL — Temporary Download Access
+
+A presigned GET URL was generated for:
+
+```text
+documents/sample.txt
+```
+
+with a five-minute expiration period.
+
+The URL successfully provided temporary access to the private object without changing the bucket's public-access configuration.
+
+After the test, all four S3 Block Public Access controls were verified as still enabled:
+
+```text
+BlockPublicAcls        = true
+IgnorePublicAcls       = true
+BlockPublicPolicy      = true
+RestrictPublicBuckets = true
+```
+
+This demonstrated that a presigned URL does not require making the bucket or object public.
+
+A presigned URL should still be treated as sensitive while valid because possession of the URL can provide the operation authorized by its signature.
+
+---
+
+## Presigned PUT Upload Lab
+
+A second exercise tested direct upload to the private bucket using a presigned PUT URL.
+
+Local test object:
+
+```text
+test-data/presigned-upload-test.txt
+```
+
+Destination:
+
+```text
+documents/presigned-upload-test.txt
+```
+
+The local test file contained:
+
+```text
+CloudVault presigned upload test.
+```
+
+### SDK Setup
+
+Python and the AWS SDK for Python were installed locally for the exercise.
+
+The environment used:
+
+```text
+Python 3.13
+Boto3
+Botocore
+AWS Common Runtime (CRT)
+```
+
+Boto3 was configured to use the existing `cloudvault` AWS profile rather than introducing static access keys.
+
+Because the profile uses AWS CLI login-based credentials, Botocore required the AWS CRT dependency before Boto3 could consume the profile successfully.
+
+After installing the required dependency, an STS request confirmed that Boto3 could authenticate through the existing profile.
+
+No static AWS access keys were created for this exercise.
+
+### Presigned PUT Generation
+
+A small Python learning script generated a presigned URL for the S3 `put_object` operation.
+
+The request was scoped to:
+
+```text
+Bucket: cloudvault-documents-dev01
+Key: documents/presigned-upload-test.txt
+HTTP method: PUT
+Content-Type: text/plain
+Expiration: 300 seconds
+```
+
+The generated URL itself was not stored in project documentation or committed to Git.
+
+### Direct HTTP Upload
+
+PowerShell `Invoke-WebRequest` was used to upload the local file through the generated URL.
+
+The request returned:
+
+```text
+HTTP 200 OK
+```
+
+The upload request itself did not require AWS CLI credentials because the temporary authorization was contained in the signed URL.
+
+### Upload Validation
+
+`head-object` confirmed that the uploaded object had:
+
+```text
+ContentLength         = 35
+ContentType           = text/plain
+ServerSideEncryption = AES256
+StorageClass          = S3 Standard (default)
+VersionId             = assigned
+```
+
+The object was subsequently downloaded and its contents were verified:
+
+```text
+CloudVault presigned upload test.
+```
+
+S3 Block Public Access was checked again after the upload and all four controls remained enabled.
+
+This demonstrated the CloudVault pattern:
+
+```text
+Authenticated backend
+        │
+        │ authorizes operation
+        ▼
+Generate presigned URL
+        │
+        ▼
+Client ────────────────→ Private S3 bucket
+       direct transfer
+```
+
+In the future application architecture, authentication and authorization can occur through components such as Cognito, API Gateway, and Lambda before a temporary S3 URL is issued.
 
 ---
 
@@ -427,6 +661,38 @@ Multiple PowerShell statements on a single line require separators such as:
 
 This was encountered while validating JSON with `ConvertFrom-Json`.
 
+### PowerShell `Get-Content -Raw`
+
+A space is required before the `-Raw` parameter.
+
+Correct:
+
+```powershell
+Get-Content .\s3\config\lifecycle.json -Raw
+```
+
+Incorrect:
+
+```powershell
+Get-Content .\s3\config\lifecycle.json-Raw
+```
+
+### Boto3 with AWS CLI login credentials
+
+Boto3 successfully located the `cloudvault` profile and region, but initially could not use the login credential provider.
+
+Botocore reported that the AWS CRT dependency was required.
+
+Installing:
+
+```powershell
+python -m pip install "botocore[crt]"
+```
+
+allowed Boto3 to use the existing login-based AWS profile successfully.
+
+No static access keys were required.
+
 ---
 
 ## Security / Privacy Notes
@@ -450,7 +716,7 @@ Where examples are required, generic placeholders should be used.
 
 ## Current Result
 
-CloudVault currently has:
+CloudVault now has a private, versioned S3 document layer with:
 
 ```text
 CloudVaultEC2Role
@@ -460,9 +726,16 @@ CloudVaultEC2Role
 cloudvault-documents-dev01
         │
         └── documents/*
+              │
+              ├── SSE-S3 encryption
+              ├── object versioning
+              ├── 30-day noncurrent-version lifecycle expiration
+              └── temporary access through presigned URLs
 ```
 
-The role is allowed to perform only the document operations required by the current design.
+The S3 bucket remains private with all Block Public Access controls enabled.
+
+Presigned GET and PUT workflows demonstrated that temporary document access can be provided without exposing the bucket publicly.
 
 The EC2 instance profile remains intentionally deferred until the compute phase.
 
@@ -470,11 +743,15 @@ The EC2 instance profile remains intentionally deferred until the compute phase.
 
 ## Next
 
-The next Phase 1 topic is:
+The remaining Phase 1 work is:
 
 ```text
-S3 lifecycle management
+Final S3 validation
+→ documentation review
+→ Phase 1 completion
 ```
+
+After Phase 1 is complete, CloudVault will proceed to the next planned AWS infrastructure phase.
 
 The goal remains:
 
