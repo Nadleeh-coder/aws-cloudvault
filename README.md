@@ -57,6 +57,30 @@ CloudVault is a secure, scalable, and cost-conscious document platform. I am usi
 - [x] Review Phase 1 storage usage and AWS cost
 - [x] Complete Phase 1 validation and documentation
 
+### Phase 2 — Amazon EC2 / Compute
+
+**Status: 🟡 In progress — EC2 foundation and S3 integration verified**
+
+- [x] Launch `CloudVaultEC2Dev01` in `ap-southeast-1` using Amazon Linux 2023 (`t3.micro`, x86_64)
+- [x] Use the default VPC and a public subnet for the temporary compute lab; defer custom networking to Phase 3
+- [x] Configure `CloudVaultEC2SecurityGroup` with no inbound rules and outbound access
+- [x] Use Systems Manager Session Manager instead of SSH; do not create an SSH key pair
+- [x] Create `CloudVaultEC2InstanceProfile` and associate `CloudVaultEC2Role`
+- [x] Attach `AmazonSSMManagedInstanceCore` alongside the scoped `CloudVaultS3DocumentAccess` policy
+- [x] Configure an encrypted 8 GiB gp3 EBS root volume with deletion on instance termination
+- [x] Require IMDSv2 and verify instance metadata access using a session token
+- [x] Keep detailed monitoring disabled and enable termination protection
+- [x] Connect through Session Manager and verify the operating system, storage, SSM agent, and IAM role credentials
+- [x] Verify allowed S3 list, upload, download, and delete operations from the EC2 instance
+- [x] Verify access to the `private/` prefix is denied
+- [x] Confirm that deleting a current object in the versioned bucket creates a delete marker and retains its previous version
+- [x] Confirm a version-specific deletion attempt is denied (the error reported missing `s3:ListBucketVersions`)
+- [x] Practice stopping and restarting the instance for cost control
+- [ ] Create and attach a separate encrypted EBS data volume
+- [ ] Format, mount, and validate the data volume without changing the root filesystem
+- [ ] Practice EBS snapshot, restore, and cleanup operations
+- [ ] Complete Phase 2 validation, cost review, and documentation
+
 ## Current implementation
 
 CloudVault currently has a private S3 document-storage foundation with:
@@ -66,11 +90,20 @@ CloudVault currently has a private S3 document-storage foundation with:
 - SSE-S3 encryption
 - object versioning and recovery
 - 30-day expiration of noncurrent versions
-- least-privilege IAM access through `CloudVaultEC2Role`
+- least-privilege access to the `documents/` prefix through `CloudVaultEC2Role`
 - presigned GET and PUT workflows
 - baseline CloudWatch and CloudTrail observability
 
-The EC2 runtime integration is intentionally deferred until the compute phase.
+The Phase 2 compute lab now adds:
+
+- an Amazon Linux 2023 `t3.micro` EC2 instance in `ap-southeast-1`, using the default VPC temporarily
+- an encrypted 8 GiB gp3 EBS root volume, IMDSv2 required, and termination protection enabled
+- a security group with no inbound rules and access through AWS Systems Manager Session Manager (no SSH key pair)
+- an EC2 instance profile that supplies temporary IAM role credentials without static access keys
+- successful EC2-to-S3 list, upload, download, and delete tests, plus expected authorization-denial tests
+- verification that a normal S3 delete creates a delete marker while retaining the previous object version
+
+The separate EBS data-volume, snapshot, and restore exercises remain pending. The EC2 lab is temporary; the planned application architecture below is not yet deployed.
 
 ## Budget guardrail
 
@@ -79,6 +112,8 @@ The EC2 runtime integration is intentionally deferred until the compute phase.
 The project will prefer serverless and pay-per-use services for the final architecture. More expensive always-on resources such as NAT Gateways, load balancers, EC2 fleets, and RDS deployments will be treated as temporary learning labs unless they can be justified within the budget.
 
 Phase 1 cost validation confirmed that the S3 learning workload remained effectively at $0 at its current lab scale and comfortably within the project budget. Current-period Cost Explorer figures are estimates until billing data is finalized.
+
+During Phase 2, the EC2 instance should be stopped when not in use to avoid ongoing instance compute charges. Its EBS root volume continues to incur storage charges while the instance is stopped; additional EBS volumes, snapshots, and public IPv4 addresses may also incur charges. Review actual usage and billing rather than assuming a stopped instance has no cost.
 
 ## Planned architecture
 
@@ -133,7 +168,8 @@ aws-cloudvault/
 │   │   └── cloudvault-current-state.mmd
 │   ├── learning-log/
 │   │   ├── phase-0-iam.md
-│   │   └── phase-1-s3.md
+│   │   ├── phase-1-s3.md
+│   │   └── phase-2-ec2.md (planned in this checkpoint)
 │   └── reference/
 │       └── CloudVault_Command_Notes.xlsx
 ├── iam/
@@ -142,7 +178,7 @@ aws-cloudvault/
 │       └── cloudvault-s3-document-access.json
 ├── s3/
 │   └── config/
-│       ├── bucket_encryption.json
+│       ├── bucket-encryption.json
 │       ├── bucket-tags.json
 │       └── lifecycle.json
 ├── scripts/
