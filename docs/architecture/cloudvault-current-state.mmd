@@ -2,23 +2,37 @@ flowchart TD
     DEV[Developer] --> CLI[AWS CLI<br/>cloudvault profile]
     CLI --> S3[(S3<br/>cloudvault-documents-dev01)]
 
-    EC2[EC2 Service<br/>Future Workload] -. sts:AssumeRole .-> ROLE[CloudVaultEC2Role]
-    ROLE -->|Attached Policy| POLICY[CloudVaultS3DocumentAccess]
-    POLICY -->|Least-Privilege Access| PREFIX[S3 documents/*]
+    %% Deployed Phase 2 EC2 workload and access path
+    CLI -->|Start session| SSM[AWS Systems Manager<br/>Session Manager]
+    EC2[EC2: CloudVaultEC2Dev01<br/>Amazon Linux 2023 / t3.micro]
+    EC2 -->|SSM Agent / outbound connection| SSM
+    EC2 -->|Attached| PROFILE[CloudVaultEC2InstanceProfile]
+    PROFILE -->|Contains| ROLE[CloudVaultEC2Role]
+    ROLE -->|Customer-managed policy| POLICY[CloudVaultS3DocumentAccess]
+    ROLE -->|AWS-managed policy| SSMPOL[AmazonSSMManagedInstanceCore]
+    POLICY -->|List and object access restricted to| PREFIX[S3 documents/*]
+    EC2 -->|Verified list, upload, download, delete| PREFIX
     PREFIX --> S3
 
-    S3 --> VER[Versioning Enabled]
+    %% Current EC2 configuration
+    EC2 --> ROOT[Root EBS volume<br/>8 GiB gp3 / encrypted]
+    EC2 --> SG[Security group<br/>No inbound rules / outbound allowed]
+    EC2 --> META2[IMDSv2 required<br/>No static AWS access keys]
+    EC2 --> NET[Default VPC / public subnet<br/>No SSH key pair]
+
+    %% Existing Phase 1 S3 controls and access workflows
+    S3 --> VER[Versioning enabled<br/>Delete markers retain prior versions]
     S3 --> ENC[SSE-S3<br/>AES256]
-    S3 --> BPA[Block Public Access<br/>All Controls Enabled]
-    S3 --> LIFE[Lifecycle Rule<br/>Noncurrent Versions: 30 Days]
-    S3 --> META[Object Metadata<br/>Version-Specific]
+    S3 --> BPA[Block Public Access<br/>All controls enabled]
+    S3 --> LIFE[Lifecycle rule<br/>Noncurrent versions: 30 days]
+    S3 --> META[Object metadata<br/>Version-specific]
 
     DEV --> SDK[Python / Boto3<br/>cloudvault profile]
-    SDK --> PRESIGN[Generate Presigned URL]
-    PRESIGN --> GET[Temporary GET Access]
-    PRESIGN --> PUT[Temporary PUT Access]
+    SDK --> PRESIGN[Generate presigned URL]
+    PRESIGN --> GET[Temporary GET access]
+    PRESIGN --> PUT[Temporary PUT access]
     GET --> S3
     PUT --> S3
 
-    S3 --> CW[CloudWatch<br/>Daily Storage Metrics]
-    S3 -. Management Events .-> CT[CloudTrail<br/>Event History]
+    S3 --> CW[CloudWatch<br/>Daily storage metrics]
+    S3 -. Management events .-> CT[CloudTrail<br/>Event History]
