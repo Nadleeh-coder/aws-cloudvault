@@ -59,7 +59,7 @@ CloudVault is a secure, scalable, and cost-conscious document platform. I am usi
 
 ### Phase 2 — Amazon EC2 / Compute
 
-**Status: 🟡 In progress — EC2 foundation and S3 integration verified**
+**Status: 🟡 In progress — EC2, S3 integration, and EBS recovery labs verified; final cost review and documentation checkpoint pending**
 
 - [x] Launch `CloudVaultEC2Dev01` in `ap-southeast-1` using Amazon Linux 2023 (`t3.micro`, x86_64)
 - [x] Use the default VPC and a public subnet for the temporary compute lab; defer custom networking to Phase 3
@@ -76,10 +76,16 @@ CloudVault is a secure, scalable, and cost-conscious document platform. I am usi
 - [x] Confirm that deleting a current object in the versioned bucket creates a delete marker and retains its previous version
 - [x] Confirm a version-specific deletion attempt is denied (the error reported missing `s3:ListBucketVersions`)
 - [x] Practice stopping and restarting the instance for cost control
-- [ ] Create and attach a separate encrypted EBS data volume
-- [ ] Format, mount, and validate the data volume without changing the root filesystem
-- [ ] Practice EBS snapshot, restore, and cleanup operations
-- [ ] Complete Phase 2 validation, cost review, and documentation
+- [x] Create and attach a separate encrypted 1 GiB gp3 EBS data volume in the same Availability Zone
+- [x] Identify the new NVMe device, create an XFS filesystem, and mount it at `/data/cloudvault` without modifying the root filesystem
+- [x] Configure a persistent UUID-based `/etc/fstab` mount with `nofail` and verify data survives an EC2 stop/start cycle
+- [x] Create an encrypted EBS snapshot and restore it to a separate 1 GiB volume
+- [x] Mount the restored XFS filesystem read-only using `ro,nouuid,norecovery` to handle the duplicate filesystem UUID
+- [x] Compare original and recovered test files to verify data integrity
+- [x] Unmount, detach, and delete the temporary restored volume; delete the temporary snapshot
+- [x] Stop the EC2 instance and verify the retained root and data volumes
+- [ ] Review actual Phase 2 billing and remaining resources against the budget
+- [ ] Complete the Phase 2 documentation checkpoint and decide whether to cover EC2 user data as an additional exercise
 
 ## Current implementation
 
@@ -102,8 +108,13 @@ The Phase 2 compute lab now adds:
 - an EC2 instance profile that supplies temporary IAM role credentials without static access keys
 - successful EC2-to-S3 list, upload, download, and delete tests, plus expected authorization-denial tests
 - verification that a normal S3 delete creates a delete marker while retaining the previous object version
+- a separate encrypted 1 GiB gp3 EBS data volume in the instance's Availability Zone, formatted as XFS and mounted persistently at `/data/cloudvault` using its filesystem UUID
+- a completed snapshot-and-restore exercise, including a read-only mount of the restored XFS volume and successful file-integrity comparison
+- verified cleanup of the temporary restored EBS volume and snapshot
 
-The separate EBS data-volume, snapshot, and restore exercises remain pending. The EC2 lab is temporary; the planned application architecture below is not yet deployed.
+**Verified state as of 2026-10-12:** `CloudVaultEC2Dev01` is **stopped**. Its encrypted 8 GiB root EBS volume and original encrypted 1 GiB data EBS volume remain attached (9 GiB total provisioned EBS storage). The temporary restored volume and recovery snapshot have been deleted. This is a temporary learning environment; the planned application architecture below is not yet deployed.
+
+For implementation details and verified outcomes, see the [Phase 2 EC2 and EBS learning log](docs/learning-log/phase-2-ec2.md) and [current-state Mermaid diagram](docs/architecture/cloudvault-current-state.mmd).
 
 ## Budget guardrail
 
@@ -113,7 +124,7 @@ The project will prefer serverless and pay-per-use services for the final archit
 
 Phase 1 cost validation confirmed that the S3 learning workload remained effectively at $0 at its current lab scale and comfortably within the project budget. Current-period Cost Explorer figures are estimates until billing data is finalized.
 
-During Phase 2, the EC2 instance should be stopped when not in use to avoid ongoing instance compute charges. Its EBS root volume continues to incur storage charges while the instance is stopped; additional EBS volumes, snapshots, and public IPv4 addresses may also incur charges. Review actual usage and billing rather than assuming a stopped instance has no cost.
+At the 2026-10-12 checkpoint, the EC2 instance was verified **stopped** to avoid further instance compute charges while idle. The retained 8 GiB root and 1 GiB data EBS volumes continue to incur storage charges even while the instance is stopped. The temporary restored EBS volume and snapshot were deleted after validation. Public IPv4 addresses and other provisioned resources may have separate charges depending on their configuration and state. Review actual usage in Billing/Cost Explorer and AWS Budgets; no precise Phase 2 billed amount has been verified yet.
 
 ## Planned architecture
 
@@ -169,7 +180,7 @@ aws-cloudvault/
 │   ├── learning-log/
 │   │   ├── phase-0-iam.md
 │   │   ├── phase-1-s3.md
-│   │   └── phase-2-ec2.md (planned in this checkpoint)
+│   │   └── phase-2-ec2.md
 │   └── reference/
 │       └── CloudVault_Command_Notes.xlsx
 ├── iam/

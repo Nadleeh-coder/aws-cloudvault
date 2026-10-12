@@ -3,9 +3,9 @@ flowchart TD
     CLI --> S3[(S3<br/>cloudvault-documents-dev01)]
 
     %% Deployed Phase 2 EC2 workload and access path
-    CLI -->|Start session| SSM[AWS Systems Manager<br/>Session Manager]
-    EC2[EC2: CloudVaultEC2Dev01<br/>Amazon Linux 2023 / t3.micro]
-    EC2 -->|SSM Agent / outbound connection| SSM
+    CLI -->|Start session when running| SSM[AWS Systems Manager<br/>Session Manager]
+    EC2[EC2: CloudVaultEC2Dev01<br/>Amazon Linux 2023 / t3.micro<br/>Current state: stopped]
+    EC2 -->|SSM Agent / outbound connection when running| SSM
     EC2 -->|Attached| PROFILE[CloudVaultEC2InstanceProfile]
     PROFILE -->|Contains| ROLE[CloudVaultEC2Role]
     ROLE -->|Customer-managed policy| POLICY[CloudVaultS3DocumentAccess]
@@ -14,11 +14,22 @@ flowchart TD
     EC2 -->|Verified list, upload, download, delete| PREFIX
     PREFIX --> S3
 
-    %% Current EC2 configuration
-    EC2 --> ROOT[Root EBS volume<br/>8 GiB gp3 / encrypted]
+    %% Current EC2 configuration and retained EBS volumes
+    EC2 -->|Root volume attached| ROOT[Root EBS volume<br/>8 GiB gp3 / encrypted<br/>XFS root filesystem]
+    EC2 -->|Data volume attached| DATA[CloudVaultEBSDataDev01<br/>1 GiB gp3 / encrypted<br/>XFS at /data/cloudvault<br/>Persistent mount via filesystem UUID]
     EC2 --> SG[Security group<br/>No inbound rules / outbound allowed]
     EC2 --> META2[IMDSv2 required<br/>No static AWS access keys]
     EC2 --> NET[Default VPC / public subnet<br/>No SSH key pair]
+
+    %% Completed EBS recovery lab: historical resources, not currently deployed
+    subgraph RECOVERY[Completed EBS snapshot and restore lab - temporary resources deleted]
+        SNAP[EBS snapshot<br/>Created and verified<br/>Deleted after recovery test]
+        RESTORED[Restored 1 GiB EBS volume<br/>Attached and mounted read-only<br/>Deleted after verification]
+        VERIFY[Recovery verification<br/>XFS ro,nouuid,norecovery<br/>Test file matched original]
+        SNAP -.->|Restored to new volume| RESTORED
+        RESTORED -.->|Compared recovered file| VERIFY
+    end
+    DATA -.->|Snapshot created during lab| SNAP
 
     %% Existing Phase 1 S3 controls and access workflows
     S3 --> VER[Versioning enabled<br/>Delete markers retain prior versions]
@@ -36,3 +47,6 @@ flowchart TD
 
     S3 --> CW[CloudWatch<br/>Daily storage metrics]
     S3 -. Management events .-> CT[CloudTrail<br/>Event History]
+
+    %% Dotted connections indicate the completed historical recovery workflow.
+    style RECOVERY fill:#f5f5f5,stroke:#888,stroke-dasharray:5 5

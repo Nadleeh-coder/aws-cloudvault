@@ -1,9 +1,8 @@
 # Phase 2 --- Amazon EC2 / Compute
 
 **Project:** CloudVault\
-**Status:** 🟡 In Progress --- EC2 and S3 integration checkpoint
-complete; EBS lab pending\
-**Checkpoint:** 2026-10-11\
+**Status:** 🟢 EC2, S3 integration, and EBS hands-on labs complete; Phase 2 documentation and optional follow-up review remain\
+**Checkpoint:** 2026-10-12\
 **Region:** `ap-southeast-1`
 
 ## Objective
@@ -16,8 +15,8 @@ The implementation follows the CloudVault learning loop:
 
 **Learn → Build → Break → Troubleshoot → Document → Improve**
 
-This log describes **verified work only**. Pending EBS and later compute
-exercises are not marked complete.
+This log describes **verified work only**. Optional additional compute
+exercises and the final cost review are not marked complete.
 
 ------------------------------------------------------------------------
 
@@ -56,20 +55,35 @@ exercises are not marked complete.
 -   [x] Attempt a version-specific deletion and inspect the
     access-denied response
 
-### Remaining Phase 2 work
+### EBS data volume, persistence, and recovery
 
--   [ ] Confirm the instance's current stopped/running state before
-    resuming
--   [ ] Create a separate encrypted gp3 EBS data volume in the
+-   [x] Confirm the existing instance and its Availability Zone
+-   [x] Create a separate encrypted 1 GiB gp3 EBS data volume in the
     instance's Availability Zone
--   [ ] Attach the volume and identify its actual Linux device name
--   [ ] Format and mount **only the verified new data volume**
--   [ ] Write and verify data on the mounted filesystem
--   [ ] Explore EBS snapshots and restoration to a new volume
--   [ ] Clean up temporary data volumes and snapshots
--   [ ] Complete any additional planned EC2 exercises, such as user data
--   [ ] Recheck cost, security, and resource inventory
--   [ ] Finalize Phase 2 documentation
+-   [x] Attach the volume and identify the correct Linux NVMe device by
+    its EBS volume serial number
+-   [x] Check that the new data device is blank before formatting it as XFS
+-   [x] Mount the new filesystem and verify a test file
+-   [x] Configure a UUID-based `/etc/fstab` entry with `nofail` and
+    validate the configuration
+-   [x] Stop/start EC2 and confirm automatic remount and data persistence
+-   [x] Create and verify completion of an encrypted EBS snapshot
+-   [x] Restore the snapshot to a second encrypted EBS volume
+-   [x] Mount the restored XFS volume read-only despite the duplicate UUID
+-   [x] Compare restored and original files to confirm data integrity
+-   [x] Unmount, detach, and delete the temporary restored volume
+-   [x] Delete the temporary snapshot after recovery verification
+-   [x] Stop the EC2 instance and verify both intended EBS volumes remain
+    attached
+
+### Remaining Phase 2 follow-up
+
+-   [ ] Decide whether any optional compute exercises (such as EC2 user
+    data) are needed before closing Phase 2
+-   [ ] Review AWS Billing/Budgets and remaining resource costs; no
+    measured Phase 2 charges are recorded here
+-   [ ] Update the architecture diagram and README, then finalize the
+    documentation checkpoint
 
 ------------------------------------------------------------------------
 
@@ -85,9 +99,9 @@ exercises are not marked complete.
                                                            resources in the chosen
                                                            Region
 
-  Availability Zone       `ap-southeast-1a`                Reference for the
-                                                           upcoming EBS attachment
-                                                           lab
+  Availability Zone       `ap-southeast-1a`                Required same-AZ
+                                                           placement for the EBS
+                                                           attachment lab
 
   Instance type           `t3.micro`                       Small, temporary
                                                            learning workload
@@ -336,9 +350,10 @@ The filesystem check showed approximately 1.6 GiB used and 6.4 GiB
 available at the time of inspection.
 
 **Important EBS lesson:** The EC2 launch block-device name and the
-device name seen inside a Nitro-based Linux instance may differ. For the
-later data-volume lab, the new device must be identified using the live
-`lsblk` output rather than assuming a fixed `/dev/nvme...` name.
+device name seen inside a Nitro-based Linux instance may differ. During
+the data-volume lab, the new device was identified using the live
+`lsblk` output and EBS volume serial number rather than assuming a fixed
+`/dev/nvme...` name.
 
 ------------------------------------------------------------------------
 
@@ -405,8 +420,8 @@ instance's `BlockDeviceMappings` and used for a targeted
 
 This verified the root EBS configuration.
 
-The root volume is **not** the disposable data volume for the upcoming
-EBS lab. It must not be reformatted.
+The root volume was **not** used for the data-volume formatting exercise.
+It must not be reformatted.
 
 ------------------------------------------------------------------------
 
@@ -577,17 +592,21 @@ rather than inferring a different authorization failure.
 ## Stop/Start and Cost Management
 
 The same EC2 instance was stopped and later restarted during the lab.
-After restarting, the instance was verified as running and Systems
-Manager returned to `Online`.
+After restarting, the instance was verified as running, Systems Manager
+returned to `Online`, and the UUID-based data-volume mount and test file
+persisted.
 
-At the end of the last session, stopping the instance was recommended,
-but the final stop confirmation was **not captured in this learning
-log**. Its current state should be checked before the next lab.
+At the end of the EBS snapshot/restore exercise on **2026-10-12**, the
+instance was explicitly stopped. The `instance-stopped` waiter completed,
+and a subsequent `describe-instances` call confirmed `State: stopped`.
+Its block-device mappings still listed **two EBS volumes**: the encrypted
+8 GiB root volume and the retained encrypted 1 GiB data volume.
 
-Stopping an EC2 instance stops instance compute charges while it remains
-stopped, but the attached EBS storage continues to incur charges. Public
-IPv4 and other resources may have separate pricing depending on their
-state and configuration.
+Stopping an EC2 instance generally stops instance compute charges while
+it remains stopped, but its attached EBS storage continues to incur
+charges. At this checkpoint, **9 GiB of EBS storage remains provisioned**
+(8 GiB root plus 1 GiB data). Public IPv4 and other resources may have
+separate pricing depending on their state and configuration.
 
 The following decisions help protect CloudVault's **under USD 10/month
 steady-state budget target**:
@@ -597,7 +616,8 @@ steady-state budget target**:
 -   Avoid unnecessary additional EBS volumes and snapshots.
 -   Keep detailed EC2 monitoring disabled unless needed.
 -   Review billing and AWS Budgets after labs.
--   Remove disposable EBS data volumes and snapshots after validation.
+-   Remove disposable **restored** EBS volumes and snapshots after
+    validation; keep the original 1 GiB data volume for now.
 
 No precise Phase 2 bill has yet been documented; do not present a cost
 estimate as a measured charge.
@@ -650,6 +670,40 @@ access-denied message.
 **Lesson:** Distinguish direct runtime evidence from IAM
 policy-simulator results.
 
+### Nitro NVMe names differ from AWS attachment names
+
+**Observation:** The original EBS data volume was attached through the
+EC2 API as `/dev/sdf` but appeared in Linux as `/dev/nvme1n1`. The
+restored volume was attached as `/dev/sdg` and appeared as
+`/dev/nvme2n1` in this session.
+
+**Lesson:** Use `lsblk` serial numbers and the actual live device
+inventory before formatting, mounting, or unmounting a disk. These NVMe
+names are observations, **not** stable names to hard-code.
+
+### Restored XFS volume had the same filesystem UUID
+
+**Observation:** The snapshot copy retained the original XFS filesystem
+UUID, so both attached volumes had the same UUID.
+
+**Resolution:** Mount the restored device at a separate directory with
+`ro,nouuid,norecovery` to inspect the recovered file without mounting a
+second filesystem under the same UUID or replaying its journal.
+
+**Lesson:** A snapshot restores filesystem identity as well as file
+contents. Do not add the restored copy to `/etc/fstab` using the original
+UUID, and do not use the snapshot copy as a new writable filesystem
+without an appropriate identity and recovery plan.
+
+### Deletion verification returned NotFound errors
+
+**Observation:** After deleting the temporary restored volume,
+`describe-volumes` returned `InvalidVolume.NotFound`. After deleting the
+snapshot, `describe-snapshots` returned `InvalidSnapshot.NotFound`.
+
+**Lesson:** These errors were the expected *post-deletion verification*
+results, not failures of the preceding delete requests.
+
 ### PowerShell versus Linux commands
 
 Commands run on the developer workstation use Windows PowerShell syntax,
@@ -659,37 +713,173 @@ continuation.
 
 ------------------------------------------------------------------------
 
-## Planned EBS Lab --- Not Yet Performed
+## EBS Data Volume, Persistence, Snapshot, and Recovery Lab
 
-The next exercise will create a **separate** encrypted gp3 EBS data
-volume, provisionally named:
+**Status: Complete — verified 2026-10-12**
 
-``` text
-CloudVaultDataDev01
+This lab used the existing `CloudVaultEC2Dev01` instance in
+`ap-southeast-1a`; no replacement EC2 instance was created. The original
+data volume was retained, while the restored copy and temporary snapshot
+were deleted after recovery testing.
+
+### 1. Create and identify a separate EBS data volume
+
+An **encrypted 1 GiB gp3** EBS volume named `CloudVaultEBSDataDev01` was
+created in the same Availability Zone as the instance and attached using
+the EC2 device designation `/dev/sdf`.
+
+Inside Amazon Linux 2023, the disk appeared as `/dev/nvme1n1` during
+this lab. The volume serial number from `lsblk` matched the intended EBS
+volume ID. The device was checked with `blkid` and `wipefs -n` before
+formatting; no pre-existing filesystem was found.
+
+Representative **Linux** verification commands:
+
+```bash
+lsblk -o NAME,SIZE,TYPE,SERIAL,FSTYPE,MOUNTPOINTS
+sudo blkid /dev/nvme1n1
+sudo wipefs -n /dev/nvme1n1
 ```
 
-Planned approach:
+**Safety:** `/dev/nvme1n1` is the device name observed in this specific
+session. On another boot or instance it could differ. Never run `mkfs`
+on the root disk (`/dev/nvme0n1` in this lab) or an unverified device.
 
-1.  Verify the existing EC2 instance and its Availability Zone.
-2.  Create a small encrypted gp3 EBS volume in **the same Availability
-    Zone**.
-3.  Attach it to the existing instance.
-4.  Inspect `lsblk` and identify the **new blank disk** unambiguously.
-5.  Format **only that new disk**, mount it, and verify filesystem
-    access.
-6.  Write test data, then explore snapshot and restore behavior.
-7.  Verify restored data on a new volume.
-8.  Remove temporary data volumes and snapshots when finished.
-9.  Stop the EC2 instance and review remaining billable resources.
+### 2. Format, mount, and write test data
 
-**Destructive-command warning:** Never run `mkfs`, partitioning
-commands, or filesystem creation against `/dev/nvme0n1` or its root
-partitions. Nitro NVMe enumeration must be verified at the time of the
-lab; do not assume the attached data volume always appears at a specific
-`/dev/nvme...` path.
+Only after confirming the blank data disk, it was formatted as XFS and
+mounted at `/data/cloudvault`.
 
-The EBS data volume, snapshots, and restoration are **planned**, not
-deployed or verified at this checkpoint.
+```bash
+sudo mkfs.xfs /dev/nvme1n1
+sudo mkdir -p /data/cloudvault
+sudo mount /dev/nvme1n1 /data/cloudvault
+findmnt /data/cloudvault
+```
+
+A file named `ebs-test.txt` was written and read back successfully. Its
+verified contents were:
+
+```text
+CloudVault EBS storage test - Phase 2
+```
+
+### 3. Configure persistent mounting
+
+The data filesystem was configured in `/etc/fstab` using its **filesystem
+UUID**, rather than its changing Nitro NVMe device name. The entry used
+this pattern (actual UUID intentionally omitted from this public log):
+
+```fstab
+UUID=<verified-data-filesystem-uuid> /data/cloudvault xfs defaults,nofail 0 0
+```
+
+A backup of `/etc/fstab` was saved before editing. The command
+`findmnt --verify --verbose` reported **no errors or warnings**. The instance was then
+stopped and started, and the volume automatically remounted at
+`/data/cloudvault`. The original test file was still present with the
+same contents.
+
+**Lesson:** EBS persists independently of the EC2 compute lifecycle;
+`nofail` helps avoid a boot failure if a nonessential data volume is
+unavailable, while the UUID targets the intended filesystem.
+
+### 4. Create and complete an EBS snapshot
+
+The filesystem writes were synchronized before creating an encrypted
+snapshot of the original data volume. The snapshot was named
+`CloudVaultEBSSnapshotDev01` and its status was verified as
+**completed, 100%** before restoration.
+
+**Lesson:** An EBS snapshot is a point-in-time block-storage backup.
+Application-consistent backups may require additional application
+quiescing beyond a filesystem `sync`.
+
+### 5. Restore to a separate volume and verify the recovered file
+
+A second **encrypted 1 GiB gp3** volume named
+`CloudVaultEBSRestoredDev01` was created from the completed snapshot in
+`ap-southeast-1a` and attached to the same EC2 instance as `/dev/sdg`.
+It appeared as `/dev/nvme2n1` during this session. Its NVMe serial
+number was checked against the restored volume ID.
+
+`blkid` showed that the restored XFS filesystem retained the **same UUID**
+as the original volume. Rather than attempting a normal mount,
+the restored copy was mounted **read-only** at a separate path:
+
+```bash
+sudo mkdir -p /data/cloudvault-restored
+sudo mount -t xfs -o ro,nouuid,norecovery /dev/nvme2n1 /data/cloudvault-restored
+```
+
+The recovered `ebs-test.txt` was present and its contents matched the
+original. A byte-for-byte comparison produced no differences:
+
+```bash
+cmp /data/cloudvault/ebs-test.txt /data/cloudvault-restored/ebs-test.txt
+```
+
+**Result:** Snapshot restoration and file integrity were verified. The
+read-only mount avoided changing the recovered copy during inspection.
+
+### 6. Clean up only the temporary recovery resources
+
+The restored filesystem was unmounted, and `findmnt` and `lsblk` were
+used to verify that it was no longer mounted:
+
+```bash
+sudo umount /data/cloudvault-restored
+findmnt /data/cloudvault-restored
+lsblk -o NAME,SIZE,TYPE,SERIAL,FSTYPE,MOUNTPOINTS
+```
+
+From **Windows PowerShell**, the restored volume was detached **without
+using `--force`**. `aws ec2 wait volume-available` completed, and
+`describe-volumes` returned `State: available` with `Attachments: []`.
+The restored volume was then deleted; the follow-up lookup returned
+`InvalidVolume.NotFound` as expected.
+
+The temporary snapshot was deleted only **after** the restore and
+comparison succeeded. A follow-up lookup returned
+`InvalidSnapshot.NotFound`, confirming its removal.
+
+The **original** data volume, its `/etc/fstab` entry, and the test file
+were deliberately retained. No deletion or reformatting of the root or
+original data volume was performed.
+
+### 7. Final EC2 and storage state
+
+The instance was stopped, the `instance-stopped` waiter completed, and
+the AWS CLI verified the following end state:
+
+| Resource | Verified state on 2026-10-12 |
+| --- | --- |
+| `CloudVaultEC2Dev01` (`t3.micro`) | `stopped` |
+| Encrypted gp3 root EBS volume | 8 GiB, retained and attached |
+| `CloudVaultEBSDataDev01` | 1 GiB, retained and attached |
+| `CloudVaultEBSRestoredDev01` | Deleted; `InvalidVolume.NotFound` |
+| `CloudVaultEBSSnapshotDev01` | Deleted; `InvalidSnapshot.NotFound` |
+
+The EC2 instance's final block-device mappings showed **two volumes**.
+The snapshot and restored copy no longer incur ongoing storage charges,
+but the retained 9 GiB of EBS storage can still be billed while EC2 is
+stopped. Actual charges have not yet been reviewed in AWS Billing.
+
+### AWS Solutions Architect Associate takeaways
+
+-   **Availability Zones:** An EBS volume must be in the same AZ as the
+    EC2 instance to attach it directly.
+-   **EBS versus instance lifecycle:** Stopping EC2 preserves attached
+    EBS data; EBS storage billing can continue while compute is stopped.
+-   **Snapshots:** Restore by creating a new EBS volume from a completed
+    snapshot, then attach and verify its data.
+-   **Nitro NVMe naming:** Match the disk serial to the EBS volume ID;
+    do not rely solely on the Linux device name.
+-   **Filesystem recovery:** Restored XFS filesystems can share UUIDs;
+    take precautions when attaching the original and restored copy to
+    the same Linux instance.
+-   **Cost and security:** Encrypt storage, keep the test environment
+    minimal, remove disposable copies, and confirm cleanup explicitly.
 
 ------------------------------------------------------------------------
 
@@ -719,7 +909,8 @@ AWS Systems Manager Session Manager
 CloudVaultEC2Dev01
   - Amazon Linux 2023
   - No inbound security-group rules
-  - Encrypted gp3 root EBS
+  - Encrypted 8 GiB gp3 root EBS
+  - Encrypted 1 GiB gp3 data EBS at /data/cloudvault
   - IMDSv2 required
        |
        v
@@ -738,6 +929,10 @@ AmazonSSMManagedInstanceCore  CloudVaultS3DocumentAccess
                         - Noncurrent version lifecycle
 ```
 
+The original 1 GiB data volume remains attached to the stopped EC2
+instance. The recovery snapshot and restored EBS volume were temporary
+lab resources and are **not** part of the current deployed architecture.
+
 The EC2 instance is a learning environment and is **not** part of the
 final serverless application design unless future architecture decisions
 explicitly change that direction.
@@ -747,11 +942,19 @@ explicitly change that direction.
 ## Checkpoint Summary
 
 **Completed:** Secure EC2 deployment, Session Manager access, root EBS
-validation, IMDSv2 and role credential verification, and live S3
-least-privilege integration including versioned deletion behavior.
+validation, IMDSv2 and role credential verification, live S3
+least-privilege integration (including versioned deletion behavior), and
+the complete EBS data-volume, persistence, snapshot, restore,
+integrity-verification, and temporary-resource cleanup exercises.
 
-**Pending:** Separate EBS data-volume exercises, snapshots and restore,
-additional compute lessons, cleanup, and final Phase 2 validation.
+**Verified end state (2026-10-12):** EC2 `stopped`; original encrypted
+8 GiB root and 1 GiB data volumes retained; temporary restored EBS
+volume and snapshot deleted.
 
-**Next action:** Verify the existing instance's current state and resume
-the EBS lab without creating a replacement EC2 instance.
+**Pending:** Optional additional compute exercise decision, actual
+billing review, architecture diagram and README updates, and final
+Phase 2 documentation review.
+
+**Next action:** Update `docs/architecture/cloudvault-current-state.mmd`
+and `README.md` on the `docs/phase-2-ebs-lab` feature branch, inspect the
+Git diff, and prepare the documentation pull request.
